@@ -1,0 +1,47 @@
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+
+local CombatModule = require(ReplicatedStorage.Shared.CombatModule)
+local Punch = CombatModule.new({
+    Damage = 10,
+    AttackSpeed = 0.4,
+    AttackRange = 5,
+    KnockbackForce = 15,
+    StunDuration = 4,
+    Posture = 100,
+    MaxCombo = 3,
+    Timing = 0.6,
+    Endlag = 2,
+    UppercutCD = 4,
+    DownSlamCD = 3,
+    HitBoxesSize = Vector3.new(6, 6, 6),
+    Animations = ReplicatedStorage.Animations:GetChildren()
+})
+
+local CombatRemote = ReplicatedStorage.Remote.CombatRemote
+
+CombatRemote.OnServerEvent:Connect(function(plr, action)
+    local character = plr.Character
+    if not character then return end
+    
+    Punch:Init(character)
+    
+    if action == "Attack" then
+        Punch:Hit(plr)
+    elseif action == "Block" then
+        Punch:Block(plr)
+        elseif action == "Jump" then
+            if Punch.CombatStates[character].Air == true then return end
+
+            local humanoid = character:FindFirstChild("Humanoid")
+            if not humanoid then return end
+            
+            local isInAir = humanoid.FloorMaterial == Enum.Material.Air
+        
+            if Punch.CombatStates[character].Counter == 0 and not isInAir then
+                Punch.CombatStates[character].Uppercut = true
+            else
+                humanoid.Jump = true
+            end
+        end
+end)
