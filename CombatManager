@@ -1,0 +1,489 @@
+---\ Services
+local Debris = game:GetService("Debris")
+local RS = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+
+
+local CombatManager = {}
+CombatManager.__index = CombatManager
+
+function CombatManager.new(config)
+    local self = setmetatable({
+        Damage = config.Damage or 10,
+        AttackSpeed = config.AttackSpeed or 1, --- Not really nessecary but can be used to Speed up the animation
+        AttackRange = config.AttackRange or 5,
+        KnockbackForce = config.KnockbackForce or 10,
+        StunDuration = config.StunDuration or 4,
+        Posture = config.Posture or 100,
+        MaxCombo = config.MaxCombo or 3,
+        Timing = config.Timing or .2,
+        Endlag = config.Endlag or 2,
+        UppercutCD = config.UppercutCD or 6,
+        DownSlamCD = config.DownSlamCD or 3,
+        HitBoxesSize = config.HitBoxesSize or Vector3.new(4,4,4),
+        Animations = config.Animations or {},
+        CombatStates = {},
+
+    }, CombatManager)
+
+    return self
+end 
+
+
+function CombatManager:Init(character) : CharacterMesh
+    if self.CombatStates[character] then return end
+    if self.CombatStates[character] == nil then
+        self.CombatStates[character] = {
+            CombatEnabled = true,
+            Air = false,
+            Stunned = false,
+            Counter = 0,
+            LastDownSlamTime = 0,
+            LastUppercutTime = 0,
+            Attacking = false,
+            Uppercut = false,
+            DownSlam = false,
+        }
+
+    end
+end
+
+
+
+function CombatManager:Knockback(pChar, eChar)
+    local pHRP = pChar:WaitForChild("HumanoidRootPart")
+    local eHRP = eChar:WaitForChild("HumanoidRootPart")
+    local Debris = game:GetService("Debris")
+    
+    -- Direction vectors (normalized)
+    local playerDirection = (pHRP.Position - eHRP.Position).Unit
+    local enemyDirection = (eHRP.Position - pHRP.Position).Unit
+    
+    
+    -- For the enemy
+    if self.CombatStates[pChar].Counter == 3 then
+        local Ebv = Instance.new("BodyVelocity")
+        Ebv.Parent = eHRP
+        Ebv.Velocity = pChar.HumanoidRootPart.CFrame.LookVector * self.KnockbackForce * 4
+        Ebv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        Debris:AddItem(Ebv, .5)
+        local bv = Instance.new("BodyVelocity")
+        bv.Parent = pHRP
+        bv.Velocity = pChar.HumanoidRootPart.CFrame.LookVector * self.KnockbackForce / 2.3
+        bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        Debris:AddItem(bv, .2)
+    else
+        if self.CombatStates[pChar].Air == true then
+                local Ebv = Instance.new("BodyVelocity")
+                Ebv.Parent = eHRP
+                Ebv.Velocity = pChar.HumanoidRootPart.CFrame.LookVector + Vector3.new(0, -2, 3) * self.KnockbackForce * 4
+                Ebv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                Debris:AddItem(Ebv, .2)
+                local bv = Instance.new("BodyVelocity")
+                bv.Parent = pHRP
+                bv.Velocity = pChar.HumanoidRootPart.CFrame.LookVector * self.KnockbackForce / 1.5
+                bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                Debris:AddItem(bv, .2)
+                if pChar:FindFirstChild("HumanoidRootPart"):FindFirstChild("Attachment") then
+                   pChar.HumanoidRootPart.Attachment:Destroy()
+                   if eChar:FindFirstChild("HumanoidRootPart"):FindFirstChild("Attachment") then
+                    eChar.HumanoidRootPart.Attachment:Destroy()
+                   end
+                   for i, v in workspace:GetDescendants() do
+                    if v:IsA("AlignPosition") then
+                        v:Destroy()
+                    end
+                   end
+                end
+            else
+                local Ebv = Instance.new("BodyVelocity")
+                Ebv.Parent = eHRP
+                Ebv.Velocity = pChar.HumanoidRootPart.CFrame.LookVector * self.KnockbackForce
+                Ebv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                Debris:AddItem(Ebv, .2)
+                local bv = Instance.new("BodyVelocity")
+                bv.Parent = pHRP
+                bv.Velocity = pChar.HumanoidRootPart.CFrame.LookVector * self.KnockbackForce / 2.3
+                bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                Debris:AddItem(bv, .2)    
+        end
+    end
+end
+
+function CombatManager:CounterUpdate(counter, character)
+     if counter < self.MaxCombo then
+        self.CombatStates[character].Counter += 1
+     else
+        self.CombatStates[character].Counter = 1
+     end
+end
+
+function CombatManager:PlayStuffs(character, action)
+    local Humanoid = character:WaitForChild("Humanoid")
+    local animator = Humanoid.Animator
+
+    if action == "Attack" then
+        local anim = RS.Animations:FindFirstChild(self.CombatStates[character].Counter)
+        if anim then
+            Humanoid.WalkSpeed = 7
+            local animations = animator:LoadAnimation(anim)
+            animations:Play()
+            animations.Stopped:Connect(function()
+                Humanoid.WalkSpeed = 16
+                self.CombatStates[character].Attacking = false
+                self.CombatStates[character].CombatEnabled = true
+                
+            end)
+        end
+    elseif action == "Block" then
+        local anim = RS.Animations:FindFirstChild("Block")
+        if anim then
+            local animations = animator:LoadAnimation(anim)
+            animations:Play()
+            Humanoid.WalkSpeed = 4
+            character:GetAttributeChangedSignal("Blocking"):Connect(function()
+                if character:GetAttribute("Blocking") == false then
+                    animations:Stop()
+                    Humanoid.WalkSpeed = 16
+                    
+                end
+            end)
+        elseif action == "DownSlam" then
+            local anim = RS.Animations:FindFirstChild("DownSlam")
+            if anim then
+                local animations = animator:LoadAnimation(anim)
+                animations:Play()
+            end
+        elseif action == "Uppercut" then
+            local anim = RS.Animations:FindFirstChild("Uppercut")
+            if anim then
+                local animations = animator:LoadAnimation(anim)
+                animations:Play()
+            end
+        end
+    end
+end
+
+function CombatManager:Hitbox(character, HRP, Action)
+    local HitboxParams = OverlapParams.new()
+    HitboxParams.FilterType = Enum.RaycastFilterType.Exclude
+    HitboxParams.FilterDescendantsInstances = {character, workspace.Terrain}
+
+    local hitboxCFrame
+    local hitboxSize
+    
+    if Action == "Hit" then
+        hitboxCFrame = HRP.CFrame * CFrame.new(0, 0, -self.AttackRange/2)
+        hitboxSize = Vector3.new(0, 0, 0)
+    elseif Action == "DownSlam" then
+        hitboxCFrame = HRP.CFrame * CFrame.new(0, -3, -self.AttackRange/2)
+        hitboxSize = Vector3.new(0, 8, 0)
+    elseif Action == "Uppercut" then
+        hitboxCFrame = HRP.CFrame * CFrame.new(0, 4, -self.AttackRange/2)
+        hitboxSize = Vector3.new(0, 8, 0)
+    end
+
+    -- Debug visualizationl
+    local hitboxPart = Instance.new("Part")
+    hitboxPart.Anchored = true
+    hitboxPart.CanCollide = false
+    hitboxPart.Transparency = 0.5
+    hitboxPart.Size = self.HitBoxesSize + hitboxSize
+    hitboxPart.CFrame = hitboxCFrame
+    hitboxPart.Parent = workspace
+    game:GetService("Debris"):AddItem(hitboxPart, 0.2)
+
+    return workspace:GetPartBoundsInBox(hitboxCFrame, self.HitBoxesSize + hitboxSize, HitboxParams)
+end
+
+function CombatManager:Uppercut(character)
+    local CurrentTime = tick()
+    local HRP = character.HumanoidRootPart
+    local Humanoid = character.Humanoid
+    
+    -- Check if Uppercut flag is set
+    if self.CombatStates[character].Uppercut == true then
+        -- Check cooldown
+        if CurrentTime - self.CombatStates[character].LastUppercutTime < self.UppercutCD then 
+            print("Uppercut failed: On cooldown")
+            self.CombatStates[character].Uppercut = false
+            return false 
+        end
+     
+        -- Update cooldown timer
+        self.CombatStates[character].LastUppercutTime = CurrentTime
+     
+        -- Apply upward force
+        local uppercutForce = Instance.new("BodyVelocity")
+        uppercutForce.Parent = HRP
+        uppercutForce.Velocity = Vector3.new(0, 45, 0) + (HRP.CFrame.LookVector * 8)
+        uppercutForce.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        game:GetService("Debris"):AddItem(uppercutForce, 0.3)
+        
+        print("Uppercut executed")
+        
+        task.wait(0.1)
+        
+        -- Create hitbox
+        local GetPart = self:Hitbox(character, HRP, "Uppercut")
+        local EHRP
+        for _, part in pairs(GetPart) do
+            if not part.Parent:FindFirstChild("HumanoidRootPart") then continue end
+            
+            local EChar = part.Parent
+            local EHum = EChar:FindFirstChild("Humanoid")
+            local ESHRP = EChar:FindFirstChild("HumanoidRootPart")
+            
+            if EHum and ESHRP then
+                -- Apply damage
+                EHum:TakeDamage(self.Damage * 1.3)
+                EHRP = ESHRP
+
+                -- Apply knockback to opponent
+                local Ebv = Instance.new("BodyVelocity")
+                Ebv.Parent = ESHRP
+                Ebv.Velocity = Vector3.new(0, 50, 0) + (HRP.CFrame.LookVector * 10)
+                Ebv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                game:GetService("Debris"):AddItem(Ebv, 0.4)
+                
+                -- Reset state
+                self.CombatStates[character].Uppercut = false
+                break
+            end
+        end
+        
+
+        task.delay(0.4, function()
+            if not EHRP then self.CombatStates[character].Uppercut = false self.CombatStates[character].Air = false return end
+            self.CombatStates[character].Uppercut = false
+            self.CombatStates[character].Air = true
+            
+            -- Get current position to freeze at
+            local currentPosition = HRP.Position
+            local EcurrentPosition = EHRP.Position
+            
+            -- Create attachments
+            local playerAttachment = Instance.new("Attachment")
+            playerAttachment.Parent = HRP
+            
+            local worldAttachment = Instance.new("Attachment")
+            worldAttachment.Parent = workspace.Terrain
+            worldAttachment.WorldPosition = currentPosition
+            
+
+            local alignPosition = Instance.new("AlignPosition")
+            alignPosition.Parent = HRP
+            alignPosition.Attachment0 = playerAttachment
+            alignPosition.Attachment1 = worldAttachment
+            alignPosition.MaxForce = 10000
+            alignPosition.Responsiveness = 25
+            alignPosition.RigidityEnabled = false
+            alignPosition.ReactionForceEnabled = true
+            alignPosition.ApplyAtCenterOfMass = true
+
+            local EplayerAttachment = Instance.new("Attachment")
+            EplayerAttachment.Parent = EHRP
+            
+            local EworldAttachment = Instance.new("Attachment")
+            EworldAttachment.Parent = workspace.Terrain
+            EworldAttachment.WorldPosition = EcurrentPosition
+            
+
+            local EalignPosition = Instance.new("AlignPosition")
+            EalignPosition.Parent = EHRP
+            EalignPosition.Attachment0 = EplayerAttachment
+            EalignPosition.Attachment1 = EworldAttachment
+            EalignPosition.MaxForce = 10000
+            EalignPosition.Responsiveness = 25
+            EalignPosition.RigidityEnabled = false
+            EalignPosition.ReactionForceEnabled = true
+            EalignPosition.ApplyAtCenterOfMass = true
+            
+            
+
+            task.delay(4, function()
+                alignPosition:Destroy()
+                playerAttachment:Destroy()
+                worldAttachment:Destroy()
+                EalignPosition:Destroy()
+                EplayerAttachment:Destroy()
+                EworldAttachment:Destroy()
+                self.CombatStates[character].Air = false
+            end)
+        end)
+        
+        return true
+    end
+    
+    return false
+end
+
+function CombatManager:DownSlam(character)
+    local CurrentTime = tick()
+    local HRP = character.HumanoidRootPart
+    local Humanoid = character.Humanoid
+
+
+    if self.CombatStates[character].Air == true then return false end
+    if CurrentTime - self.CombatStates[character].LastDownSlamTime < self.DownSlamCD then 
+        self.CombatStates[character].DownSlam = false
+        print("DownSlam on cooldown!", CurrentTime - self.CombatStates[character].LastDownSlamTime)
+        return false  
+    end
+    if Humanoid.FloorMaterial ~= Enum.Material.Air then return false end
+        -- Set cooldown
+        self.CombatStates[character].LastDownSlamTime = CurrentTime
+        
+        
+
+        -- Apply downward force
+        local slamForce = Instance.new("BodyVelocity")
+        slamForce.Parent = HRP
+        slamForce.Velocity = Vector3.new(0, -35, 0) 
+        slamForce.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        game:GetService("Debris"):AddItem(slamForce, 0.3)
+        
+        
+        -- Delay the hitbox to match the animation timing
+        task.wait(0.3)
+        
+        -- Create hitbox at the right time
+        local GetPart = self:Hitbox(character, HRP, "DownSlam")
+        for _, part in pairs(GetPart) do
+            if not part.Parent or not part.Parent:FindFirstChild("HumanoidRootPart") then continue end
+            
+            local EChar = part.Parent
+            local EHum = EChar:FindFirstChild("Humanoid")
+            local EHRP = EChar:FindFirstChild("HumanoidRootPart")
+            
+            if EHum and EHRP then
+                -- Apply damage
+                EHum:TakeDamage(self.Damage * 1.15)
+                
+                -- Apply knockback force - slamming down
+                local Ebv = Instance.new("BodyVelocity")
+                Ebv.Parent = EHRP
+                Ebv.Velocity = -HRP.CFrame.UpVector * 20
+                Ebv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                game:GetService("Debris"):AddItem(Ebv, 0.2)
+                
+                -- Apply stun effect
+                task.spawn(function()
+                    EHum:ChangeState(Enum.HumanoidStateType.PlatformStanding)
+                    task.wait(0.4)
+                    EHum:ChangeState(Enum.HumanoidStateType.Running)
+                end)
+                
+                break
+            end
+        
+        -- Reset state after a delay (moved outside the hit loop)
+        self.CombatStates[character].DownSlam = false
+        return true -- Return true regardless of hit (moved outside the hit loop)
+    end
+    return false
+end
+
+function CombatManager:Hit(plr)
+    local character = plr.Character
+    local HRP = character:WaitForChild("HumanoidRootPart")
+    local Humanoid = character.Humanoid
+    if not HRP then return end
+
+    if self.CombatStates[character].Stunned == true then return end
+    if self.CombatStates[character].CombatEnabled == false then return end
+    if self.CombatStates[character].Attacking == true then return end
+
+
+    local isInAir = Humanoid.FloorMaterial == Enum.Material.Air
+    
+    print("Checking")
+    if isInAir then
+        if self.CombatStates[character].Air == true then return 
+    else
+        if self.CombatStates[character].Counter == 0 then
+            self.CombatStates[character].Uppercut = true
+            if self:Uppercut(character) then return end
+        else
+            self.CombatStates[character].DownSlam = true
+            if self:DownSlam(character) then return end
+            if self.CombatStates[character].DownSlam == true then return end
+
+        end
+    end
+ end
+        
+
+
+
+    if self.CombatStates[character].Counter == self.MaxCombo then
+        self.CombatStates[character].CombatEnabled = false
+        task.wait(self.Endlag)
+        self.CombatStates[character].CombatEnabled = true
+        self.CombatStates[character].Counter = 0
+        return
+    end
+
+    self:CounterUpdate(self.CombatStates[character].Counter, character)
+    
+    print(self.CombatStates[character].Counter)
+    if self:Uppercut(character) then return end
+    if self.CombatStates[character].Uppercut == true then return end
+    print("Pass Hit")
+
+    self:PlayStuffs(character, "Attack")
+    self.CombatStates[character].CombatEnabled = false
+    self.CombatStates[character].Attacking = true
+
+    task.wait(self.Timing)
+    local GetPart = self:Hitbox(character, HRP, "Hit")
+
+    for _, part in GetPart do
+        if not part.Parent:FindFirstChild("HumanoidRootPart") then continue end
+        
+        local EChar = part.Parent
+        local EHum = EChar:FindFirstChild("Humanoid")
+        
+        if EChar and EHum then
+            if EChar:GetAttribute("Blocking") == true then
+                local EPosture = EChar:GetAttribute("Posture")
+                if EPosture > 0 then
+                    EPosture -= self.Damage * 2
+                    EChar:SetAttribute("Posture", EPosture)
+                end
+            end
+
+            EHum:TakeDamage(self.Damage)
+            self:Knockback(character, part.Parent)
+            break
+        end
+    end
+end
+
+function CombatManager:Block(plr)
+    local character = plr.Character
+    local Block = character:GetAttribute("Blocking")
+
+
+    if self.CombatStates[character].CombatEnabled == false and Block == false then return end
+    if self.CombatStates[character].Attacking == true then return end
+    if self.CombatStates[character].Stunned == true then return end
+
+
+
+    if Block == nil or Block == false then 
+        character:SetAttribute("Blocking", true)
+        character:SetAttribute("Posture", self.Posture)
+        self:PlayStuffs(character, "Block")
+
+        self.CombatStates[character].CombatEnabled = false
+        --- You play animations
+    else
+        character:SetAttribute("Blocking", false)
+        self.CombatStates[character].CombatEnabled = true
+        --- You play animations ( maybe you can just add An Event idk)
+    end
+end
+
+
+return CombatManager
