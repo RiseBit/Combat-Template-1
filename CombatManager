@@ -325,7 +325,7 @@ function CombatManager:SetupAirPositioning(character, HRP, EHRP)
 
 	local EworldAttachment = Instance.new("Attachment")
 	EworldAttachment.Parent = workspace.Terrain
-	EworldAttachment.WorldPosition = currentPosition + Vector3.new(0, 0, 5)
+	EworldAttachment.WorldPosition = currentPosition + HRP.CFrame.LookVector * Vector3.new(0, 0, 5)
 
 	local EalignPosition = Instance.new("AlignPosition")
 	EalignPosition.Parent = EHRP
@@ -382,7 +382,6 @@ function CombatManager:DownSlam(character)
 
 	-- Create hitbox
 	local GetPart = self:Hitbox(character, HRP, "DownSlam")
-	local hitTarget = false
 	local targetChar
 
 	for _, part in pairs(GetPart) do
@@ -394,8 +393,6 @@ function CombatManager:DownSlam(character)
 		local EHRP = EChar:FindFirstChild("HumanoidRootPart")
 
 		if EHum and EHRP then
-			hitTarget = true
-			-- Apply damage
 			EHum:TakeDamage(self.Damage * 1.15)
 
 			-- Apply knockback force - slamming down
@@ -693,6 +690,8 @@ function CombatManager:Animation(character, action)
 			anim1:Play()
 			anim1.Stopped:Connect(function()
 				anim2:Play()
+				task.wait(self.StunDuration - .5)
+				anim2:Stop()
 			end)
 		end
 	end
