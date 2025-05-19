@@ -8,14 +8,16 @@ local Punch = CombatModule.new({
     AttackRange = 5,
     KnockbackForce = 15,
     StunDuration = 4,
-    Posture = 100,
+    Posture = 20,
     MaxCombo = 3,
     Timing = 0.6,
     Endlag = 2,
     UppercutCD = 4,
     DownSlamCD = 3,
     HitBoxesSize = Vector3.new(6, 6, 6),
-    Animations = ReplicatedStorage.Animations:GetChildren()
+    Animations = ReplicatedStorage.Animations,
+    SFX = ReplicatedStorage.SFX,
+    VFX = ReplicatedStorage.VFX
 })
 
 local CombatRemote = ReplicatedStorage.Remote.CombatRemote
@@ -31,14 +33,16 @@ CombatRemote.OnServerEvent:Connect(function(plr, action)
     elseif action == "Block" then
         Punch:Block(plr)
         elseif action == "Jump" then
-            if Punch.CombatStates[character].Air == true then return end
+			if Punch.CombatStates[character].Air == true then return end
+			if Punch.CombatStates[character].CombatEnabled == false  then return end
+			if Punch.CombatStates[character].Stunned == true then return end
 
             local humanoid = character:FindFirstChild("Humanoid")
             if not humanoid then return end
             
             local isInAir = humanoid.FloorMaterial == Enum.Material.Air
         
-            if Punch.CombatStates[character].Counter == 0 and not isInAir then
+            if Punch.CombatStates[character].Counter == 0 or Punch.CombatStates[character].Counter == 2 and not isInAir then
                 Punch.CombatStates[character].Uppercut = true
             else
                 humanoid.Jump = true
