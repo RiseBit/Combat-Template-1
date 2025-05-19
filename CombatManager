@@ -578,7 +578,7 @@ function CombatManager:Knockback(pChar, eChar)
 			-- Apply downward force
 			local Ebv = Instance.new("BodyVelocity")
 			Ebv.Parent = eHRP
-			Ebv.Velocity = pChar.HumanoidRootPart.CFrame.LookVector + Vector3.new(0, -2, 3) * self.KnockbackForce 
+			Ebv.Velocity = pChar.HumanoidRootPart.CFrame.LookVector * Vector3.new(0, -2, 3) * self.KnockbackForce 
 			Ebv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
 			Debris:AddItem(Ebv, .2)
 
